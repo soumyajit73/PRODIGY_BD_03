@@ -1,29 +1,22 @@
 const express = require("express");
-const bodyParser = require("body-parser");
-const dotenv = require("dotenv");
-
-dotenv.config();
+const usersRoutes = require("./routes/users"); // ✅ Ensure correct path
+require("dotenv").config(); // Load environment variables
 
 const app = express();
-app.use(bodyParser.json());
+const PORT = process.env.PORT || 3000;
 
-// Test route to verify server is running
-app.get("/", (req, res) => {
-  res.send("Server is running!");
-});
+// Middleware
+app.use(express.json());
 
-// Auth routes
-const authRoutes = require("./routes/auth");
-app.use("/api/auth", authRoutes);
+// Routes
+app.use("/users", usersRoutes); // ✅ Make sure this matches what you're calling in Postman
 
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).send("Internal Server Error");
+// Default route for unmatched endpoints
+app.use((req, res) => {
+  res.status(404).json({ error: "Route not found" });
 });
 
 // Start the server
-const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`server running on port  http://localhost:${PORT}`);
+  console.log(`Server running at http://localhost:${PORT}`);
 });

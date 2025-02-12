@@ -1,78 +1,60 @@
 const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const db = require("../db");
+require("dotenv").config();
+
 const router = express.Router();
 
-// Mock database (for illustration purposes)
-const users = [];
-
-// Register Route (POST /api/auth/register)
+// User Registration
 router.post("/register", async (req, res) => {
-  const { username, password, role } = req.body;
+  const { name, email, password, role } = req.body;
 
-  // Check if the user exists
-  const userExists = users.find((user) => user.username === username);
-  if (userExists) {
-    return res.status(400).send("User already exists");
+  if (!name || !email || !password || !role) {
+    return res.status(400).json({ error: "All fields are required" });
   }
 
-  // Hash the password
   const hashedPassword = await bcrypt.hash(password, 10);
 
-  // Create a new user and store it in the "database"
-  const newUser = { username, password: hashedPassword, role };
-  users.push(newUser);
-
-  res.status(201).send("User registered successfully");
+  const sql =
+    "INSERT INTO users (name, email, password, role) VALUES (?, ?, ?, ?)";
+  db.query(sql, [name, email, hashedPassword, role], (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    res.status(201).json({ message: "User registered successfully" });
+  });
 });
 
-// Login Route (POST /api/auth/login)
-router.post("/login", async (req, res) => {
-  const { username, password } = req.body;
+// User Login
+router.post("/login", (req, res) => {
+  const { email, password } = req.body;
 
-  // Find the user in the mock "database"
-  const user = users.find((u) => u.username === username);
-  if (!user) {
-    return res.status(400).send("User not found");
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password are required" });
   }
 
-  // Compare the password
-  const isPasswordCorrect = await bcrypt.compare(password, user.password);
-  if (!isPasswordCorrect) {
-    return res.status(400).send("Invalid password");
-  }
+  const sql = "SELECT * FROM users WHERE email = ?";
+  db.query(sql, [email], async (err, results) => {
+    if (err) return res.status(500).json({ error: err.message });
 
-  // Generate a JWT token
-  const token = jwt.sign(
-    { username: user.username, role: user.role },
-    process.env.JWT_SECRET,
-    {
-      expiresIn: "1h",
-    }
-  );
-
-  res.status(200).json({ token });
-});
-
-// Test Route (GET /api/auth/test)
-router.get("/test", (req, res) => {
-  res.send("Auth route working!");
-});
-
-// Protected Route (GET /api/auth/admin) - Admin Only
-router.get("/admin", (req, res) => {
-  const token = req.headers["authorization"]?.split(" ")[1];
-  if (!token) return res.status(403).send("Access denied, no token provided");
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
-    if (err) return res.status(403).send("Invalid token");
-
-    // Check if the user has 'admin' role
-    if (decoded.role !== "admin") {
-      return res.status(403).send("Access denied, insufficient privileges");
+    if (results.length === 0) {
+      return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    res.send("Welcome Admin, you have access to this route");
+    const user = results[0];
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(401).json({ error: "Invalid credentials" });
+
+    const token = jwt.sign(
+      { id: user.id, role: user.role },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "1h",
+      }
+    );
+
+    res.json({ message: "Login successful", token });
   });
 });
 
